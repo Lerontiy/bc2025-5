@@ -1,10 +1,11 @@
 {
   "name": "bc2025-5",
   "version": "1.0.0",
+  "type": "module",
   "description": "",
   "main": "main.js",
   "scripts": {
-    "dev": "nodemon main.js --host localhost --port 5000 --cache cache",
+    "dev": "nodemon main.js --host localhost --port 5000 --cache ./cache",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {

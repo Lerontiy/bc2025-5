@@ -1,5 +1,7 @@
 import { Command } from 'commander';
+import { readFile, writeFile, unlink, mkdir } from 'fs/promises'; 
 import http from 'http';
+import path from 'path'; 
 
 const program = new Command();
 program
@@ -23,32 +25,64 @@ if (check(CACHE) || check(PORT) || check(HOST)) {
 }
 
 const server = http.createServer(async (req, res) => {
-    const requestUrl = new URL(req.url, `http://${HOST}:${PORT}`);
-    const queryParams = requestUrl.searchParams;
+    const { method, url } = req;
 
-    //console.log(queryParams);
+    const fileName = url.substring(1);
 
-    let passengers;
-
-    try {
-        const data = await readFile(INPUT_FILE, 'utf-8');
-        passengers = JSON.parse(data);
-    } catch (error) {
-        res.end(`Cannot find input file.`); 
+    if (!fileName) {
+        res.writeHead(400, { 'Content-Type': 'text/plain' });
+        res.end('Bad Request: File code is missing in URL.');
         return;
     }
 
-    //console.log(typeof(passengers));
+    await mkdir(CACHE, { recursive: true });
 
-    const processedData = processData(passengers, queryParams);
+    const filePath = path.join(CACHE, fileName+'.jpg');
 
-    const xmlResponse = buildXmlResponse(processedData);
+    try {
+        if (method === 'GET') {
+            const data = await readFile(filePath);
+            
+            res.writeHead(200, { 'Content-Type': 'image/jpeg' });
+            res.end(data);
 
-    res.writeHead(200, { 'Content-Type': 'application/xml' }); 
-    res.end(xmlResponse);
+        } else if (method === 'PUT') {
+            const chunks = [];
+            for await (const chunk of req) {
+                chunks.push(chunk);
+            }
+            const data = Buffer.concat(chunks);
+
+            await writeFile(filePath, data);
+            
+            res.writeHead(201, { 'Content-Type': 'text/plain' });
+            res.end('Created');
+
+        } else if (method === 'DELETE') {
+            await unlink(filePath);
+            
+            res.writeHead(200, { 'Content-Type': 'text/plain' });
+            res.end('OK');
+
+        } else {
+            res.writeHead(405, { 'Content-Type': 'text/plain' });
+            res.end('Method Not Allowed');
+        }
+
+    } catch (error) {
+        if (error.code === 'ENOENT') {
+            res.writeHead(404, { 'Content-Type': 'text/plain' });
+            res.end('Not Found');
+        } else {
+            console.error(error);
+            res.writeHead(500, { 'Content-Type': 'text/plain' });
+            res.end('Internal Server Error');
+        }
+    }
 });
 
 server.listen(PORT, HOST, () => {
     console.log(`Сервер запущено: http://${HOST}:${PORT}`);
+    console.log(`Кеш знаходиться тут: ${path.resolve(CACHE)}`);
     console.log('Натисни Ctrl+C для зупинки.');
 });
