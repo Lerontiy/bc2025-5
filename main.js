@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import request from 'superagent';
 import { readFile, writeFile, unlink, mkdir } from 'fs/promises'; 
 import http from 'http';
 import path from 'path'; 
@@ -24,6 +25,8 @@ if (check(CACHE) || check(PORT) || check(HOST)) {
     process.exit();
 }
 
+const SERVER_URL = `http://${HOST}:${PORT}`;
+
 const server = http.createServer(async (req, res) => {
     const { method, url } = req;
 
@@ -41,11 +44,18 @@ const server = http.createServer(async (req, res) => {
 
     try {
         if (method === 'GET') {
-            const data = await readFile(filePath);
-            
+            let data;
+            try {
+                data = await readFile(filePath);
+            } catch (error) {
+                if (error.code === 'ENOENT') {
+                    const fileBuffer = (await request.get(`https://http.cat/${fileName}`)).body;
+                    await request.put(`${SERVER_URL}/${fileName}`).send(fileBuffer);
+                    data = (await request.get(`${SERVER_URL}/${fileName}`)).body;
+                }
+            }
             res.writeHead(200, { 'Content-Type': 'image/jpeg' });
             res.end(data);
-
         } else if (method === 'PUT') {
             const chunks = [];
             for await (const chunk of req) {
@@ -82,7 +92,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-    console.log(`Сервер запущено: http://${HOST}:${PORT}`);
+    console.log(`Сервер запущено: ${SERVER_URL}`);
     console.log(`Кеш знаходиться тут: ${path.resolve(CACHE)}`);
     console.log('Натисни Ctrl+C для зупинки.');
 });
